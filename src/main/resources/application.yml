@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: obsidra-brief-bot
+  main:
+    banner-mode: off
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/briefbot}
+    username: ${DATABASE_USERNAME:briefbot}
+    password: ${DATABASE_PASSWORD:briefbot}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      repositories:
+        enabled: false
+
+bot:
+  token: ${BOT_TOKEN:}
+  admin-chat-id: ${BOT_ADMIN_CHAT_ID:0}
+  human-contact-url: https://t.me/obsidra_dev
+  privacy-url: https://neironessensive.github.io/obsidra-site/privacy.html
+  daily-limit: 3
+  draft-ttl: 24h
+  zone: Europe/Moscow
+  budgets:
+    - до 20 тыс. ₽
+    - 20–50 тыс. ₽
+    - 50–150 тыс. ₽
+    - больше 150 тыс. ₽
+    - Пока не знаю
+
+logging:
+  level:
+    root: info
+    # long polling пишет в INFO каждое переподключение — оставляем только предупреждения
+    org.telegram.telegrambots: warn

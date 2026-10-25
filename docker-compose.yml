@@ -1,0 +1,50 @@
+# Бот + PostgreSQL + Redis одной командой: docker compose up -d --build
+# Базы наружу не открыты — к ним ходит только бот внутри сети compose.
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:?укажите BOT_TOKEN в .env}
+      BOT_ADMIN_CHAT_ID: ${BOT_ADMIN_CHAT_ID:-0}
+      DATABASE_URL: jdbc:postgresql://postgres:5432/briefbot
+      DATABASE_USERNAME: briefbot
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?укажите POSTGRES_PASSWORD в .env}
+      REDIS_HOST: redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: briefbot
+      POSTGRES_USER: briefbot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?укажите POSTGRES_PASSWORD в .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U briefbot -d briefbot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # AOF: черновики переживают перезапуск контейнера
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
