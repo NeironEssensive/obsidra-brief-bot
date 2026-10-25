@@ -3,7 +3,8 @@ package dev.obsidra.briefbot.lead;
 public enum LeadStatus {
     NEW("новая"),
     IN_PROGRESS("в работе"),
-    REJECTED("отклонена");
+    REJECTED("отклонена"),
+    WITHDRAWN("отозвана клиентом");
 
     private final String label;
 

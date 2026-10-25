@@ -25,6 +25,8 @@ import org.springframework.validation.annotation.Validated;
  * @param humanContactUrl куда ведёт кнопка «Написать человеку»
  * @param privacyUrl      страница политики обработки персональных данных
  * @param zone            часовой пояс для дат в карточках заявок
+ * @param proxy           прокси до api.telegram.org: {@code http://host:port} или {@code socks5://host:port};
+ *                        пусто — напрямую
  */
 @Validated
 @ConfigurationProperties("bot")
@@ -37,7 +39,8 @@ public record BotProperties(
         @DefaultValue("24h") Duration draftTtl,
         @NotBlank String humanContactUrl,
         @NotBlank String privacyUrl,
-        @DefaultValue("Europe/Moscow") ZoneId zone) {
+        @DefaultValue("Europe/Moscow") ZoneId zone,
+        String proxy) {
 
     public boolean hasAdmin() {
         return adminChatId != 0;

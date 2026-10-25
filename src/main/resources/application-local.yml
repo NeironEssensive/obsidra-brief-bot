@@ -1,0 +1,10 @@
+# Запуск на своём компьютере без Docker: java -jar target/brief-bot.jar --spring.profiles.active=local
+# Настройки берутся из .env в папке проекта; черновики хранятся в памяти (LocalDraftStore), Redis не нужен.
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    # 127.0.0.1, а не localhost: на некоторых машинах IPv6 (::1) режут прокси и VPN
+    url: jdbc:postgresql://127.0.0.1:5432/briefbot
+    username: briefbot
+    password: ${POSTGRES_PASSWORD}

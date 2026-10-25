@@ -62,9 +62,10 @@ public class BriefBotUpdateConsumer implements LongPollingSingleThreadUpdateCons
         BotResponse response = switch (command(text)) {
             case "/start" -> dialog.start(client);
             case "/cancel" -> dialog.cancel(client);
-            case "/myid" -> BotResponse.of(Reply.send("Ваш Telegram ID: <code>" + client.userId() + "</code>"));
+            case "/myid" -> myId(client);
             case "/leads" -> admin.isAdmin(client.userId()) ? admin.latest() : unknownCommand();
             case "/stats" -> admin.isAdmin(client.userId()) ? admin.stats() : unknownCommand();
+            case "/lead" -> admin.isAdmin(client.userId()) ? admin.lead(argument(text)) : unknownCommand();
             case "" -> dialog.onText(client, text);
             default -> unknownCommand();
         };
@@ -101,6 +102,18 @@ public class BriefBotUpdateConsumer implements LongPollingSingleThreadUpdateCons
         String first = text.split("\\s+", 2)[0];
         int at = first.indexOf('@');
         return (at < 0 ? first : first.substring(0, at)).toLowerCase(Locale.ROOT);
+    }
+
+    /** Всё после имени команды: {@code "/lead 1001"} → {@code "1001"}; без аргумента — пустая строка. */
+    static String argument(String text) {
+        String[] parts = text.split("\\s+", 2);
+        return parts.length > 1 ? parts[1].strip() : "";
+    }
+
+    /** ID пишется и в лог: оттуда его удобно скопировать в BOT_ADMIN_CHAT_ID без ошибок. */
+    private static BotResponse myId(Client client) {
+        log.info("/myid: Telegram ID {} (@{})", client.userId(), client.username());
+        return BotResponse.of(Reply.send("Ваш Telegram ID: <code>" + client.userId() + "</code>"));
     }
 
     private static BotResponse unknownCommand() {

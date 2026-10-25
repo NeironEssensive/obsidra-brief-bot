@@ -53,10 +53,34 @@ public class DialogService {
         return welcome();
     }
 
-    /** /cancel: заявку можно бросить на любом шаге. */
+    /**
+     * /cancel: незаконченную заявку удаляет сразу, а уже отправленную предлагает отозвать —
+     * так клиент не получит «Заявка отменена», когда отменять было нечего.
+     */
     public BotResponse cancel(Client client) {
-        drafts.delete(client.userId());
-        return BotResponse.of(Reply.send(Texts.CANCELLED));
+        if (drafts.find(client.userId()).isPresent()) {
+            drafts.delete(client.userId());
+            return BotResponse.of(Reply.send(Texts.CANCELLED));
+        }
+        List<Lead> active = leads.activeLeadsOf(client.userId());
+        if (active.isEmpty()) {
+            return BotResponse.of(Reply.send(Texts.NOTHING_TO_CANCEL));
+        }
+        if (active.size() == 1) {
+            Lead lead = active.getFirst();
+            return BotResponse.of(Reply.send(
+                    Texts.withdrawOffer(lead.getId(), lead.getProjectType()),
+                    List.of(List.of(
+                            callback("Да, отозвать", Callbacks.WITHDRAW + lead.getId()),
+                            callback("Нет", Callbacks.WITHDRAW_KEEP)))));
+        }
+        List<List<Button>> rows = new ArrayList<>();
+        for (Lead lead : active) {
+            rows.add(List.of(callback("Отозвать №" + lead.getId() + " · " + lead.getProjectType().label(),
+                    Callbacks.WITHDRAW + lead.getId())));
+        }
+        rows.add(List.of(callback("Ничего не отзывать", Callbacks.WITHDRAW_KEEP)));
+        return BotResponse.of(Reply.send(Texts.WITHDRAW_CHOOSE, rows));
     }
 
     public BotResponse onText(Client client, String text) {
@@ -87,6 +111,10 @@ public class DialogService {
             default -> {
             }
         }
+        // отзыв относится к отправленной заявке, черновик для него не нужен
+        if (data.startsWith(Callbacks.WITHDRAW)) {
+            return onWithdrawButton(client, data);
+        }
         Optional<Draft> found = drafts.find(client.userId());
         if (found.isEmpty()) {
             return BotResponse.notice(Texts.STALE_BUTTON);
@@ -115,6 +143,21 @@ public class DialogService {
         return drafts.find(client.userId())
                 .map(draft -> BotResponse.of(Reply.replace(Texts.RESUMED), question(draft, client)))
                 .orElseGet(() -> begin(client, Texts.RESTARTED));
+    }
+
+    private BotResponse onWithdrawButton(Client client, String data) {
+        if (data.equals(Callbacks.WITHDRAW_KEEP)) {
+            return BotResponse.of(Reply.replace(Texts.WITHDRAW_KEPT));
+        }
+        long leadId;
+        try {
+            leadId = Long.parseLong(data.substring(Callbacks.WITHDRAW.length()));
+        } catch (NumberFormatException e) {
+            return BotResponse.notice(Texts.STALE_BUTTON);
+        }
+        return leads.withdraw(client.userId(), leadId)
+                .map(lead -> BotResponse.of(Reply.replace(Texts.withdrawn(lead.getId()))))
+                .orElseGet(() -> BotResponse.of(Reply.replace(Texts.WITHDRAW_IMPOSSIBLE)));
     }
 
     private BotResponse onTypeButton(Draft draft, Client client, String data) {

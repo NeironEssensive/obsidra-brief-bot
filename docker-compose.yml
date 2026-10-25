@@ -7,6 +7,8 @@ services:
     environment:
       BOT_TOKEN: ${BOT_TOKEN:?укажите BOT_TOKEN в .env}
       BOT_ADMIN_CHAT_ID: ${BOT_ADMIN_CHAT_ID:-0}
+      # прокси на самом компьютере из контейнера доступен как host.docker.internal, а не 127.0.0.1
+      BOT_PROXY: ${BOT_PROXY:-}
       DATABASE_URL: jdbc:postgresql://postgres:5432/briefbot
       DATABASE_USERNAME: briefbot
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?укажите POSTGRES_PASSWORD в .env}

@@ -28,12 +28,27 @@ public class LeadCards {
         this.props = props;
     }
 
+    /** Карточка новой заявки — так она приходит владельцу. */
     public String card(Lead lead) {
+        return body(lead, "🆕 <b>Заявка №" + lead.getId() + "</b>");
+    }
+
+    /** Карточка с текущим статусом: после нажатия кнопки статуса и по команде /lead. */
+    public String cardWithStatus(Lead lead) {
+        return body(lead, "<b>Заявка №" + lead.getId() + "</b>") + "\n\n<b>Статус:</b> " + lead.getStatus().label();
+    }
+
+    public String withdrawn(Lead lead) {
+        return "↩️ <b>Клиент отозвал заявку</b>\n" + shortLine(lead)
+                + "\n\nПодробности: /lead " + lead.getId();
+    }
+
+    private String body(Lead lead, String header) {
         String client = "<a href=\"tg://user?id=" + lead.getTgUserId() + "\">"
                 + Html.escape(lead.getClientName() == null ? "Клиент" : lead.getClientName()) + "</a>"
                 + (lead.getTgUsername() == null ? "" : " (@" + lead.getTgUsername() + ")");
         return """
-                🆕 <b>Заявка №%d</b>
+                %s
 
                 <b>Что сделать:</b> %s
                 <b>Задача:</b> %s
@@ -44,7 +59,7 @@ public class LeadCards {
                 <b>Клиент:</b> %s
 
                 <i>%s</i>""".formatted(
-                lead.getId(),
+                header,
                 lead.getProjectType().label(),
                 Html.escape(lead.getDescription()),
                 Texts.assetsLabel(lead.getAssets()),
@@ -53,11 +68,6 @@ public class LeadCards {
                 Html.escape(lead.getContact()),
                 client,
                 FULL_TIME.format(lead.getCreatedAt().atZone(props.zone())));
-    }
-
-    /** Карточка с текущим статусом — ей заменяется исходная карточка после нажатия кнопки статуса. */
-    public String cardWithStatus(Lead lead) {
-        return card(lead) + "\n\n<b>Статус:</b> " + lead.getStatus().label();
     }
 
     public List<List<Button>> statusKeyboard(Lead lead) {

@@ -21,6 +21,10 @@ final class Callbacks {
     static final String CANCEL = "confirm:cancel";
     static final String EDIT_FIELD = "edit:";
 
+    /** {@code withdraw:<номер>} — отозвать отправленную заявку; {@code withdraw:keep} — передумал. */
+    static final String WITHDRAW = "withdraw:";
+    static final String WITHDRAW_KEEP = "withdraw:keep";
+
     private Callbacks() {
     }
 

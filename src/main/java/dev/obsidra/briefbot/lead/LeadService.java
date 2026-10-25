@@ -4,10 +4,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
@@ -18,6 +20,9 @@ import dev.obsidra.briefbot.config.BotProperties;
 
 @Service
 public class LeadService {
+
+    /** Статусы, в которых клиент ещё может отозвать заявку. */
+    private static final Set<LeadStatus> ACTIVE = EnumSet.of(LeadStatus.NEW, LeadStatus.IN_PROGRESS);
 
     private final LeadRepository repository;
     private final ApplicationEventPublisher events;
@@ -48,12 +53,47 @@ public class LeadService {
         return lead;
     }
 
+    /**
+     * Владелец разбирает новую заявку. Решение по уже разобранной или отозванной заявке не перезаписывается:
+     * под старой карточкой могли остаться кнопки.
+     *
+     * @return заявка с её актуальным статусом (он мог и не измениться)
+     */
     @Transactional
     public Optional<Lead> changeStatus(long leadId, LeadStatus status) {
         return repository.findById(leadId).map(lead -> {
-            lead.changeStatus(status, clock.instant());
+            if (lead.getStatus() == LeadStatus.NEW) {
+                lead.changeStatus(status, clock.instant());
+            }
             return lead;
         });
+    }
+
+    /** Заявки клиента, которые ещё можно отозвать, от свежих к старым. */
+    @Transactional(readOnly = true)
+    public List<Lead> activeLeadsOf(long tgUserId) {
+        return repository.findByTgUserIdAndStatusInOrderByCreatedAtDesc(tgUserId, ACTIVE);
+    }
+
+    /**
+     * Клиент отзывает свою заявку, пока она новая или в работе.
+     *
+     * @return отозванная заявка или пусто, если она чужая, не найдена или уже закрыта
+     */
+    @Transactional
+    public Optional<Lead> withdraw(long tgUserId, long leadId) {
+        return repository.findById(leadId)
+                .filter(lead -> lead.getTgUserId() == tgUserId && ACTIVE.contains(lead.getStatus()))
+                .map(lead -> {
+                    lead.changeStatus(LeadStatus.WITHDRAWN, clock.instant());
+                    events.publishEvent(new LeadWithdrawnEvent(lead));
+                    return lead;
+                });
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Lead> find(long leadId) {
+        return repository.findById(leadId);
     }
 
     @Transactional(readOnly = true)

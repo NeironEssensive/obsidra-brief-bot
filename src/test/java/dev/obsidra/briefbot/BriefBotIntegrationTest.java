@@ -123,6 +123,30 @@ class BriefBotIntegrationTest {
         assertThat(stats.byStatus()).containsEntry(LeadStatus.NEW, 2L).containsEntry(LeadStatus.IN_PROGRESS, 1L);
     }
 
+    @Test
+    void clientCanWithdrawOnlyOwnActiveLeadAndOnlyOnce() {
+        Lead lead = leads.submit(request(500L, ProjectType.SITE));
+
+        assertThat(leads.withdraw(501L, lead.getId())).as("чужая заявка").isEmpty();
+        assertThat(leads.activeLeadsOf(500L)).extracting(Lead::getId).containsExactly(lead.getId());
+
+        assertThat(leads.withdraw(500L, lead.getId())).map(Lead::getStatus).contains(LeadStatus.WITHDRAWN);
+
+        assertThat(leads.withdraw(500L, lead.getId())).as("повторный отзыв").isEmpty();
+        assertThat(leads.activeLeadsOf(500L)).isEmpty();
+    }
+
+    @Test
+    void ownerDecisionDoesNotOverrideWithdrawal() {
+        Lead lead = leads.submit(request(600L, ProjectType.BOT));
+        leads.withdraw(600L, lead.getId());
+
+        // под старой карточкой могли остаться кнопки «Взял в работу» / «Отклонить»
+        assertThat(leads.changeStatus(lead.getId(), LeadStatus.IN_PROGRESS))
+                .map(Lead::getStatus)
+                .contains(LeadStatus.WITHDRAWN);
+    }
+
     private static LeadRequest request(long userId, ProjectType type) {
         return new LeadRequest(userId, "client" + userId, "Клиент", type, "Нужен проект для теста",
                 Set.of(Asset.SPEC, Asset.REFERENCES), "20–50 тыс. ₽", Deadline.MONTH, "@client" + userId);

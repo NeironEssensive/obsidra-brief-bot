@@ -1,5 +1,6 @@
 package dev.obsidra.briefbot.telegram;
 
+import java.io.IOException;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -26,6 +27,7 @@ import dev.obsidra.briefbot.message.Reply;
 public class ReplySender {
 
     private static final Logger log = LoggerFactory.getLogger(ReplySender.class);
+    private static final int SEND_ATTEMPTS = 3;
     private static final LinkPreviewOptions NO_PREVIEW = LinkPreviewOptions.builder().isDisabled(true).build();
 
     private final TelegramClient telegram;
@@ -51,8 +53,9 @@ public class ReplySender {
         }
     }
 
-    public void send(long chatId, Reply reply) {
-        execute(SendMessage.builder()
+    /** @return {@code true}, если Telegram принял сообщение */
+    public boolean send(long chatId, Reply reply) {
+        return execute(SendMessage.builder()
                 .chatId(String.valueOf(chatId))
                 .text(reply.text())
                 .parseMode(ParseMode.HTML)
@@ -91,16 +94,35 @@ public class ReplySender {
                 .build();
     }
 
-    private void execute(BotApiMethod<?> method) {
-        try {
-            telegram.execute(method);
-        } catch (TelegramApiException e) {
-            // повторное нажатие на ту же кнопку пытается записать в сообщение тот же текст — это не ошибка
-            if (String.valueOf(e.getMessage()).contains("message is not modified")) {
-                log.debug("Сообщение не изменилось: {}", method.getMethod());
-                return;
+    private boolean execute(BotApiMethod<?> method) {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                telegram.execute(method);
+                return true;
+            } catch (TelegramApiException e) {
+                // повторное нажатие на ту же кнопку пытается записать в сообщение тот же текст — это не ошибка
+                if (String.valueOf(e.getMessage()).contains("message is not modified")) {
+                    log.debug("Сообщение не изменилось: {}", method.getMethod());
+                    return true;
+                }
+                // обрыв сети повторяем, а ошибку самого Telegram (неверный запрос, бот заблокирован) — нет
+                boolean networkError = e.getCause() instanceof IOException;
+                if (networkError && attempt < SEND_ATTEMPTS) {
+                    log.debug("Сеть оборвалась при {}, повтор {}", method.getMethod(), attempt);
+                    pause(attempt);
+                    continue;
+                }
+                log.warn("Telegram не принял {}: {}", method.getMethod(), e.getMessage());
+                return false;
             }
-            log.warn("Telegram не принял {}: {}", method.getMethod(), e.getMessage());
+        }
+    }
+
+    private static void pause(int attempt) {
+        try {
+            Thread.sleep(500L * attempt);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 }

@@ -1,6 +1,7 @@
 package dev.obsidra.briefbot.lead;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.domain.Limit;
@@ -11,6 +12,8 @@ import org.springframework.data.repository.query.Param;
 public interface LeadRepository extends JpaRepository<Lead, Long> {
 
     long countByTgUserIdAndCreatedAtAfter(long tgUserId, Instant after);
+
+    List<Lead> findByTgUserIdAndStatusInOrderByCreatedAtDesc(long tgUserId, Collection<LeadStatus> statuses);
 
     List<Lead> findAllByOrderByCreatedAtDesc(Limit limit);
 

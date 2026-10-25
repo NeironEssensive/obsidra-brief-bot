@@ -2,10 +2,15 @@ package dev.obsidra.briefbot.dialog;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+
+import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +28,7 @@ import dev.obsidra.briefbot.lead.LeadRequest;
 import dev.obsidra.briefbot.lead.LeadService;
 import dev.obsidra.briefbot.lead.ProjectType;
 import dev.obsidra.briefbot.message.BotResponse;
+import dev.obsidra.briefbot.message.Button;
 import dev.obsidra.briefbot.message.Reply;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,8 +50,7 @@ class DialogServiceTest {
 
     @Test
     void fullBriefIsSubmittedWithAllAnswers() {
-        Lead saved = mock(Lead.class);
-        when(saved.getId()).thenReturn(1001L);
+        Lead saved = lead(1001L);
         when(leads.submit(any())).thenReturn(saved);
 
         fillUpToConfirm(IVAN);
@@ -199,6 +204,91 @@ class DialogServiceTest {
         assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.CANCELLED);
         assertThat(drafts.find(IVAN.userId())).isEmpty();
         verify(leads, never()).submit(any());
+    }
+
+    @Test
+    void cancelWithDraftDeletesItWithoutTouchingSubmittedLeads() {
+        dialog.onButton(IVAN, Callbacks.START);
+
+        BotResponse response = dialog.cancel(IVAN);
+
+        assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.CANCELLED);
+        assertThat(drafts.find(IVAN.userId())).isEmpty();
+        verify(leads, never()).activeLeadsOf(anyLong());
+    }
+
+    @Test
+    void cancelWithoutDraftOffersToWithdrawActiveLead() {
+        Lead active = lead(1001L);
+        when(active.getProjectType()).thenReturn(ProjectType.BOT);
+        when(leads.activeLeadsOf(IVAN.userId())).thenReturn(List.of(active));
+
+        BotResponse response = dialog.cancel(IVAN);
+
+        Reply offer = response.replies().getFirst();
+        assertThat(offer.text()).contains("№1001").contains("Telegram-бот");
+        assertThat(offer.keyboard().getFirst()).extracting(Button::callbackData)
+                .containsExactly(Callbacks.WITHDRAW + "1001", Callbacks.WITHDRAW_KEEP);
+    }
+
+    @Test
+    void severalActiveLeadsAreOfferedOneByOne() {
+        Lead newer = lead(1002L);
+        when(newer.getProjectType()).thenReturn(ProjectType.BACKEND);
+        Lead older = lead(1001L);
+        when(older.getProjectType()).thenReturn(ProjectType.SITE);
+        when(leads.activeLeadsOf(IVAN.userId())).thenReturn(List.of(newer, older));
+
+        Reply choice = dialog.cancel(IVAN).replies().getFirst();
+
+        assertThat(choice.text()).isEqualTo(Texts.WITHDRAW_CHOOSE);
+        assertThat(choice.keyboard()).extracting(row -> row.getFirst().callbackData())
+                .containsExactly(Callbacks.WITHDRAW + "1002", Callbacks.WITHDRAW + "1001", Callbacks.WITHDRAW_KEEP);
+    }
+
+    @Test
+    void cancelWithNothingActiveSaysSoInsteadOfFakeCancellation() {
+        when(leads.activeLeadsOf(IVAN.userId())).thenReturn(List.of());
+
+        BotResponse response = dialog.cancel(IVAN);
+
+        assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.NOTHING_TO_CANCEL);
+    }
+
+    @Test
+    void confirmedWithdrawalGoesToLeadService() {
+        Lead withdrawn = lead(1001L);
+        when(leads.withdraw(IVAN.userId(), 1001L)).thenReturn(Optional.of(withdrawn));
+
+        BotResponse response = dialog.onButton(IVAN, Callbacks.WITHDRAW + "1001");
+
+        assertThat(response.replies()).singleElement().satisfies(reply -> {
+            assertThat(reply.replaceOriginal()).isTrue();
+            assertThat(reply.text()).isEqualTo(Texts.withdrawn(1001L));
+        });
+    }
+
+    @Test
+    void closedLeadCannotBeWithdrawn() {
+        when(leads.withdraw(IVAN.userId(), 1001L)).thenReturn(Optional.empty());
+
+        BotResponse response = dialog.onButton(IVAN, Callbacks.WITHDRAW + "1001");
+
+        assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.WITHDRAW_IMPOSSIBLE);
+    }
+
+    @Test
+    void keepingLeadChangesNothing() {
+        BotResponse response = dialog.onButton(IVAN, Callbacks.WITHDRAW_KEEP);
+
+        assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.WITHDRAW_KEPT);
+        verifyNoInteractions(leads);
+    }
+
+    private static Lead lead(long id) {
+        Lead lead = mock(Lead.class);
+        when(lead.getId()).thenReturn(id);
+        return lead;
     }
 
     private void goToAssets(Client client) {

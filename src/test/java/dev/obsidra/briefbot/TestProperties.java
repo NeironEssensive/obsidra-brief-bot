@@ -15,6 +15,6 @@ public final class TestProperties {
         return new BotProperties("test-token", 0, false,
                 List.of("до 20 тыс. ₽", "20–50 тыс. ₽", "50–150 тыс. ₽", "больше 150 тыс. ₽", "Пока не знаю"),
                 3, Duration.ofHours(24), "https://t.me/obsidra_dev", "https://example.org/privacy",
-                ZoneId.of("Europe/Moscow"));
+                ZoneId.of("Europe/Moscow"), null);
     }
 }

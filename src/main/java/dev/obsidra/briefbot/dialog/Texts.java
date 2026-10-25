@@ -43,6 +43,12 @@ public final class Texts {
     public static final String UNKNOWN_COMMAND = "Не знаю такой команды. Чтобы оставить заявку, нажмите /start.";
 
     public static final String CANCELLED = "Заявка отменена. Если передумаете — нажмите /start.";
+    public static final String NOTHING_TO_CANCEL =
+            "У вас нет незаконченных или активных заявок. Чтобы оставить заявку, нажмите /start.";
+    public static final String WITHDRAW_KEPT = "Хорошо, ничего не отзываем.";
+    public static final String WITHDRAW_CHOOSE = "У вас несколько активных заявок. Какую отозвать?";
+    public static final String WITHDRAW_IMPOSSIBLE =
+            "Эту заявку уже нельзя отозвать: по ней принято решение. Если нужно — напишите нам напрямую.";
     public static final String SENT_MARK = "✅ <b>Отправлено</b>";
     public static final String LIMIT_REACHED = """
             Вы уже отправили несколько заявок за сутки. \
@@ -91,6 +97,14 @@ public final class Texts {
 
     public static String submitted(long leadId) {
         return "✅ Заявка №" + leadId + " принята! Ответим в течение рабочего дня.";
+    }
+
+    public static String withdrawOffer(long leadId, ProjectType type) {
+        return "Отозвать заявку №" + leadId + " («" + type.label() + "»)? Мы больше не будем связываться по ней.";
+    }
+
+    public static String withdrawn(long leadId) {
+        return "↩️ Заявка №" + leadId + " отозвана. Если передумаете — нажмите /start.";
     }
 
     private static void line(StringBuilder text, Step field, String value) {

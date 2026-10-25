@@ -83,7 +83,22 @@ public class AdminCommands {
         }
         return leads.changeStatus(leadId, status)
                 .map(lead -> new BotResponse(List.of(Reply.replace(cards.cardWithStatus(lead))),
-                        "Статус: " + status.label()))
+                        lead.getStatus() == status
+                                ? "Статус: " + status.label()
+                                : "Статус не изменён: заявка уже " + lead.getStatus().label()))
                 .orElseGet(() -> BotResponse.notice("Заявка №" + leadId + " не найдена"));
+    }
+
+    /** /lead 1001 — карточка любой заявки, с кнопками статуса, если она ещё новая. */
+    public BotResponse lead(String argument) {
+        long leadId;
+        try {
+            leadId = Long.parseLong(argument.strip());
+        } catch (NumberFormatException e) {
+            return BotResponse.of(Reply.send("Укажите номер заявки: /lead 1001"));
+        }
+        return leads.find(leadId)
+                .map(lead -> BotResponse.of(Reply.send(cards.cardWithStatus(lead), cards.statusKeyboard(lead))))
+                .orElseGet(() -> BotResponse.of(Reply.send("Заявка №" + leadId + " не найдена.")));
     }
 }

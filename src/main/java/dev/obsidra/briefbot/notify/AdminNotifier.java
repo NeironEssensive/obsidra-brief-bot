@@ -8,6 +8,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import dev.obsidra.briefbot.config.BotProperties;
 import dev.obsidra.briefbot.lead.Lead;
 import dev.obsidra.briefbot.lead.LeadSubmittedEvent;
+import dev.obsidra.briefbot.lead.LeadWithdrawnEvent;
 import dev.obsidra.briefbot.message.Reply;
 import dev.obsidra.briefbot.telegram.ReplySender;
 
@@ -34,6 +35,18 @@ public class AdminNotifier {
             log.warn("bot.admin-chat-id не задан — заявка №{} сохранена, но владельцу не отправлена", lead.getId());
             return;
         }
-        sender.send(props.adminChatId(), Reply.send(cards.card(lead), cards.statusKeyboard(lead)));
+        boolean delivered = sender.send(props.adminChatId(), Reply.send(cards.card(lead), cards.statusKeyboard(lead)));
+        if (!delivered) {
+            // заявка уже в базе — владелец увидит её в /leads, но о проблеме нужно знать
+            log.warn("Карточка заявки №{} не доставлена владельцу {}: проверьте BOT_ADMIN_CHAT_ID (команда /myid) "
+                    + "и что с этого аккаунта в боте нажимали «Старт»", lead.getId(), props.adminChatId());
+        }
+    }
+
+    @TransactionalEventListener
+    public void onLeadWithdrawn(LeadWithdrawnEvent event) {
+        if (props.hasAdmin()) {
+            sender.send(props.adminChatId(), Reply.send(cards.withdrawn(event.lead())));
+        }
     }
 }

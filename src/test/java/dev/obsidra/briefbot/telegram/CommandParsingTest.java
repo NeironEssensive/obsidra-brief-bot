@@ -19,4 +19,15 @@ class CommandParsingTest {
     void extractsCommandName(String text, String expected) {
         assertThat(BriefBotUpdateConsumer.command(text)).isEqualTo(expected);
     }
+
+    @ParameterizedTest
+    @CsvSource({
+            "/lead 1001, 1001",
+            "/lead   1002  , 1002",
+            "/lead@obsidra_bot 7, 7",
+            "/lead, ''"
+    })
+    void extractsCommandArgument(String text, String expected) {
+        assertThat(BriefBotUpdateConsumer.argument(text.strip())).isEqualTo(expected);
+    }
 }

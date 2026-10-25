@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +22,7 @@ import dev.obsidra.briefbot.lead.ProjectType;
  * Черновик хранится в Redis как hash {@code brief:draft:<userId>} с TTL: брошенные заявки удаляются сами.
  */
 @Component
+@Profile("!local")
 public class RedisDraftStore implements DraftStore {
 
     private static final Logger log = LoggerFactory.getLogger(RedisDraftStore.class);

@@ -26,6 +26,8 @@ bot:
   daily-limit: 3
   draft-ttl: 24h
   zone: Europe/Moscow
+  # если api.telegram.org недоступен напрямую: http://127.0.0.1:2080 или socks5://127.0.0.1:2080
+  proxy: ${BOT_PROXY:}
   budgets:
     - до 20 тыс. ₽
     - 20–50 тыс. ₽
