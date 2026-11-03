@@ -20,6 +20,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import dev.obsidra.briefbot.TestProperties;
+import dev.obsidra.briefbot.i18n.Language;
+import dev.obsidra.briefbot.i18n.LocalLanguageStore;
 import dev.obsidra.briefbot.lead.Asset;
 import dev.obsidra.briefbot.lead.Deadline;
 import dev.obsidra.briefbot.lead.Lead;
@@ -34,18 +36,20 @@ import dev.obsidra.briefbot.message.Reply;
 @ExtendWith(MockitoExtension.class)
 class DialogServiceTest {
 
-    private static final Client IVAN = new Client(42L, 42L, "ivan", "Иван");
-    private static final Client NO_USERNAME = new Client(7L, 7L, null, "Аня");
+    private static final Client IVAN = new Client(42L, 42L, "ivan", "Иван", Language.RU);
+    private static final Client NO_USERNAME = new Client(7L, 7L, null, "Аня", Language.RU);
+    private static final Client JOHN = new Client(77L, 77L, "john", "John", Language.EN);
 
     @Mock
     private LeadService leads;
 
     private final InMemoryDraftStore drafts = new InMemoryDraftStore();
+    private final LocalLanguageStore languages = new LocalLanguageStore();
     private DialogService dialog;
 
     @BeforeEach
     void setUp() {
-        dialog = new DialogService(drafts, leads, TestProperties.bot());
+        dialog = new DialogService(drafts, languages, leads, TestProperties.bot());
     }
 
     @Test
@@ -67,10 +71,82 @@ class DialogServiceTest {
         assertThat(request.budget()).isEqualTo("20–50 тыс. ₽");
         assertThat(request.deadline()).isEqualTo(Deadline.MONTH);
         assertThat(request.contact()).isEqualTo("@ivan");
+        assertThat(request.language()).isEqualTo(Language.RU);
 
         assertThat(response.replies().getFirst().replaceOriginal()).isTrue();
         assertThat(response.replies().getLast().text()).contains("№1001");
         assertThat(drafts.find(IVAN.userId())).isEmpty();
+    }
+
+    @Test
+    void englishClientGetsWholeBriefInEnglish() {
+        Lead saved = lead(1001L);
+        when(leads.submit(any())).thenReturn(saved);
+
+        Reply typeQuestion = dialog.onButton(JOHN, Callbacks.START).replies().getLast();
+        assertThat(typeQuestion.text()).isEqualTo("<b>1/6.</b> What do you need?");
+        assertThat(typeQuestion.keyboard().getFirst()).extracting(Button::text)
+                .containsExactly("Website", "Telegram bot");
+
+        dialog.onButton(JOHN, Callbacks.TYPE + "BOT");
+        dialog.onText(JOHN, "Booking bot for a barbershop");
+        dialog.onButton(JOHN, Callbacks.ASSET + "DESIGN");
+        Reply budgetQuestion = dialog.onButton(JOHN, Callbacks.ASSETS_DONE).replies().getLast();
+        assertThat(budgetQuestion.keyboard().stream().flatMap(List::stream).map(Button::text))
+                .containsExactly("Under $250", "$250–600", "$600–2,000", "Over $2,000", "Not sure yet");
+        dialog.onButton(JOHN, Callbacks.BUDGET + "1");
+        dialog.onButton(JOHN, Callbacks.DEADLINE + "MONTH");
+        Reply summary = dialog.onButton(JOHN, Callbacks.CONTACT_TELEGRAM).replies().getLast();
+        assertThat(summary.text()).startsWith("<b>Check your request</b>").contains(
+                "<b>Project:</b> Telegram bot",
+                "<b>You have:</b> Design",
+                "<b>Budget:</b> $250–600",
+                "<b>Timeline:</b> Within a month",
+                "<a href=\"https://example.org/privacy\">privacy policy</a>");
+
+        BotResponse sent = dialog.onButton(JOHN, Callbacks.SEND);
+
+        ArgumentCaptor<LeadRequest> captor = ArgumentCaptor.forClass(LeadRequest.class);
+        verify(leads).submit(captor.capture());
+        assertThat(captor.getValue().language()).isEqualTo(Language.EN);
+        assertThat(captor.getValue().budget()).isEqualTo("$250–600");
+        assertThat(sent.replies().getLast().text())
+                .isEqualTo("✅ Request #1001 received! We'll reply within one business day.");
+    }
+
+    @Test
+    void welcomeOffersTheOtherLanguage() {
+        Reply russian = dialog.start(IVAN).replies().getFirst();
+        Reply english = dialog.start(JOHN).replies().getFirst();
+
+        assertThat(russian.text()).startsWith("Привет!");
+        assertThat(russian.keyboard().getLast()).singleElement()
+                .isEqualTo(Button.callback("🇬🇧 English", Callbacks.LANGUAGE + "EN"));
+        assertThat(english.text()).startsWith("Hi!");
+        assertThat(english.keyboard().getLast()).singleElement()
+                .isEqualTo(Button.callback("🇷🇺 Русский", Callbacks.LANGUAGE + "RU"));
+    }
+
+    @Test
+    void languageButtonRemembersChoiceAndRedrawsWelcome() {
+        BotResponse response = dialog.onButton(IVAN, Callbacks.LANGUAGE + "EN");
+
+        assertThat(response.replies()).singleElement().satisfies(reply -> {
+            assertThat(reply.replaceOriginal()).isTrue();
+            assertThat(reply.text()).isEqualTo(Texts.get(Language.EN, "welcome"));
+            assertThat(reply.keyboard().getLast()).singleElement()
+                    .isEqualTo(Button.callback("🇷🇺 Русский", Callbacks.LANGUAGE + "RU"));
+        });
+        assertThat(languages.find(IVAN.userId())).contains(Language.EN);
+        assertThat(drafts.find(IVAN.userId())).isEmpty();
+    }
+
+    @Test
+    void unknownLanguageButtonIsIgnored() {
+        BotResponse response = dialog.onButton(IVAN, Callbacks.LANGUAGE + "DE");
+
+        assertThat(response.notice()).isEqualTo(Texts.get(Language.RU, "stale_button"));
+        assertThat(languages.find(IVAN.userId())).isEmpty();
     }
 
     @Test
@@ -94,7 +170,8 @@ class DialogServiceTest {
 
         BotResponse response = dialog.onText(IVAN, "сайт");
 
-        assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.DESCRIPTION_TOO_SHORT);
+        assertThat(response.replies()).singleElement().extracting(Reply::text)
+                .isEqualTo(Texts.get(Language.RU, "description.too_short"));
         assertThat(draft(IVAN).getStep()).isEqualTo(Step.DESCRIPTION);
     }
 
@@ -117,7 +194,7 @@ class DialogServiceTest {
 
         BotResponse response = dialog.onButton(IVAN, Callbacks.ASSETS_DONE);
 
-        assertThat(response.notice()).isEqualTo(Texts.PICK_ASSET);
+        assertThat(response.notice()).isEqualTo(Texts.get(Language.RU, "pick_asset"));
         assertThat(draft(IVAN).getStep()).isEqualTo(Step.ASSETS);
     }
 
@@ -127,7 +204,7 @@ class DialogServiceTest {
 
         BotResponse response = dialog.onButton(IVAN, Callbacks.BUDGET + "0");
 
-        assertThat(response.notice()).isEqualTo(Texts.STALE_BUTTON);
+        assertThat(response.notice()).isEqualTo(Texts.get(Language.RU, "stale_button"));
         assertThat(response.replies()).isEmpty();
         assertThat(draft(IVAN).getBudget()).isNull();
         assertThat(draft(IVAN).getStep()).isEqualTo(Step.TYPE);
@@ -155,7 +232,8 @@ class DialogServiceTest {
 
         BotResponse response = dialog.onButton(IVAN, Callbacks.SEND);
 
-        assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.LIMIT_REACHED);
+        assertThat(response.replies()).singleElement().extracting(Reply::text)
+                .isEqualTo(Texts.get(Language.RU, "limit_reached"));
         assertThat(drafts.find(IVAN.userId())).isPresent();
     }
 
@@ -167,7 +245,8 @@ class DialogServiceTest {
         dialog.onButton(NO_USERNAME, Callbacks.BUDGET + "0");
 
         BotResponse contactQuestion = dialog.onButton(NO_USERNAME, Callbacks.DEADLINE + "NO_RUSH");
-        assertThat(contactQuestion.replies().getLast().text()).isEqualTo(Texts.ASK_CONTACT_NO_USERNAME);
+        assertThat(contactQuestion.replies().getLast().text())
+                .isEqualTo(Texts.get(Language.RU, "ask.contact.no_username"));
         assertThat(contactQuestion.replies().getLast().keyboard()).isEmpty();
 
         dialog.onText(NO_USERNAME, "anya@example.com");
@@ -181,7 +260,7 @@ class DialogServiceTest {
         Draft draft = new Draft(IVAN.userId());
         draft.setDescription("<b>Сайт</b> & магазин");
 
-        String summary = Texts.summary(draft, null);
+        String summary = Texts.summary(draft, Language.RU, null);
 
         assertThat(summary).contains("&lt;b&gt;Сайт&lt;/b&gt; &amp; магазин").doesNotContain("<b>Сайт</b>");
     }
@@ -192,7 +271,8 @@ class DialogServiceTest {
 
         BotResponse response = dialog.start(IVAN);
 
-        assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.RESUME_OFFER);
+        assertThat(response.replies()).singleElement().extracting(Reply::text)
+                .isEqualTo(Texts.get(Language.RU, "resume.offer"));
     }
 
     @Test
@@ -201,7 +281,8 @@ class DialogServiceTest {
 
         BotResponse response = dialog.onButton(IVAN, Callbacks.CANCEL);
 
-        assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.CANCELLED);
+        assertThat(response.replies()).singleElement().extracting(Reply::text)
+                .isEqualTo(Texts.get(Language.RU, "cancelled"));
         assertThat(drafts.find(IVAN.userId())).isEmpty();
         verify(leads, never()).submit(any());
     }
@@ -212,7 +293,8 @@ class DialogServiceTest {
 
         BotResponse response = dialog.cancel(IVAN);
 
-        assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.CANCELLED);
+        assertThat(response.replies()).singleElement().extracting(Reply::text)
+                .isEqualTo(Texts.get(Language.RU, "cancelled"));
         assertThat(drafts.find(IVAN.userId())).isEmpty();
         verify(leads, never()).activeLeadsOf(anyLong());
     }
@@ -241,7 +323,7 @@ class DialogServiceTest {
 
         Reply choice = dialog.cancel(IVAN).replies().getFirst();
 
-        assertThat(choice.text()).isEqualTo(Texts.WITHDRAW_CHOOSE);
+        assertThat(choice.text()).isEqualTo(Texts.get(Language.RU, "withdraw.choose"));
         assertThat(choice.keyboard()).extracting(row -> row.getFirst().callbackData())
                 .containsExactly(Callbacks.WITHDRAW + "1002", Callbacks.WITHDRAW + "1001", Callbacks.WITHDRAW_KEEP);
     }
@@ -252,7 +334,8 @@ class DialogServiceTest {
 
         BotResponse response = dialog.cancel(IVAN);
 
-        assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.NOTHING_TO_CANCEL);
+        assertThat(response.replies()).singleElement().extracting(Reply::text)
+                .isEqualTo(Texts.get(Language.RU, "nothing_to_cancel"));
     }
 
     @Test
@@ -264,7 +347,7 @@ class DialogServiceTest {
 
         assertThat(response.replies()).singleElement().satisfies(reply -> {
             assertThat(reply.replaceOriginal()).isTrue();
-            assertThat(reply.text()).isEqualTo(Texts.withdrawn(1001L));
+            assertThat(reply.text()).isEqualTo(Texts.withdrawn(Language.RU, 1001L));
         });
     }
 
@@ -274,14 +357,16 @@ class DialogServiceTest {
 
         BotResponse response = dialog.onButton(IVAN, Callbacks.WITHDRAW + "1001");
 
-        assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.WITHDRAW_IMPOSSIBLE);
+        assertThat(response.replies()).singleElement().extracting(Reply::text)
+                .isEqualTo(Texts.get(Language.RU, "withdraw.impossible"));
     }
 
     @Test
     void keepingLeadChangesNothing() {
         BotResponse response = dialog.onButton(IVAN, Callbacks.WITHDRAW_KEEP);
 
-        assertThat(response.replies()).singleElement().extracting(Reply::text).isEqualTo(Texts.WITHDRAW_KEPT);
+        assertThat(response.replies()).singleElement().extracting(Reply::text)
+                .isEqualTo(Texts.get(Language.RU, "withdraw.kept"));
         verifyNoInteractions(leads);
     }
 

@@ -16,6 +16,8 @@ import dev.obsidra.briefbot.admin.AdminCommands;
 import dev.obsidra.briefbot.dialog.Client;
 import dev.obsidra.briefbot.dialog.DialogService;
 import dev.obsidra.briefbot.dialog.Texts;
+import dev.obsidra.briefbot.i18n.Language;
+import dev.obsidra.briefbot.i18n.LanguageStore;
 import dev.obsidra.briefbot.message.BotResponse;
 import dev.obsidra.briefbot.message.Reply;
 import dev.obsidra.briefbot.notify.LeadCards;
@@ -32,11 +34,14 @@ public class BriefBotUpdateConsumer implements LongPollingSingleThreadUpdateCons
     private final DialogService dialog;
     private final AdminCommands admin;
     private final ReplySender sender;
+    private final LanguageStore languages;
 
-    public BriefBotUpdateConsumer(DialogService dialog, AdminCommands admin, ReplySender sender) {
+    public BriefBotUpdateConsumer(DialogService dialog, AdminCommands admin, ReplySender sender,
+            LanguageStore languages) {
         this.dialog = dialog;
         this.admin = admin;
         this.sender = sender;
+        this.languages = languages;
     }
 
     @Override
@@ -63,11 +68,11 @@ public class BriefBotUpdateConsumer implements LongPollingSingleThreadUpdateCons
             case "/start" -> dialog.start(client);
             case "/cancel" -> dialog.cancel(client);
             case "/myid" -> myId(client);
-            case "/leads" -> admin.isAdmin(client.userId()) ? admin.latest() : unknownCommand();
-            case "/stats" -> admin.isAdmin(client.userId()) ? admin.stats() : unknownCommand();
-            case "/lead" -> admin.isAdmin(client.userId()) ? admin.lead(argument(text)) : unknownCommand();
+            case "/leads" -> admin.isAdmin(client.userId()) ? admin.latest() : unknownCommand(client);
+            case "/stats" -> admin.isAdmin(client.userId()) ? admin.stats() : unknownCommand(client);
+            case "/lead" -> admin.isAdmin(client.userId()) ? admin.lead(argument(text)) : unknownCommand(client);
             case "" -> dialog.onText(client, text);
-            default -> unknownCommand();
+            default -> unknownCommand(client);
         };
         sender.deliver(message.getChatId(), null, response, null);
     }
@@ -84,7 +89,7 @@ public class BriefBotUpdateConsumer implements LongPollingSingleThreadUpdateCons
         if (data.startsWith(LeadCards.STATUS_CALLBACK_PREFIX)) {
             response = admin.isAdmin(client.userId())
                     ? admin.onStatusButton(data)
-                    : BotResponse.notice(Texts.STALE_BUTTON);
+                    : BotResponse.notice(Texts.get(client.language(), "stale_button"));
         } else {
             response = dialog.onButton(client, data);
         }
@@ -113,14 +118,16 @@ public class BriefBotUpdateConsumer implements LongPollingSingleThreadUpdateCons
     /** ID пишется и в лог: оттуда его удобно скопировать в BOT_ADMIN_CHAT_ID без ошибок. */
     private static BotResponse myId(Client client) {
         log.info("/myid: Telegram ID {} (@{})", client.userId(), client.username());
-        return BotResponse.of(Reply.send("Ваш Telegram ID: <code>" + client.userId() + "</code>"));
+        return BotResponse.of(Reply.send(Texts.get(client.language(), "my_id", client.userId())));
     }
 
-    private static BotResponse unknownCommand() {
-        return BotResponse.of(Reply.send(Texts.UNKNOWN_COMMAND));
+    private static BotResponse unknownCommand(Client client) {
+        return BotResponse.of(Reply.send(Texts.get(client.language(), "unknown_command")));
     }
 
-    private static Client client(User user, long chatId) {
-        return new Client(user.getId(), chatId, user.getUserName(), user.getFirstName());
+    private Client client(User user, long chatId) {
+        Language language = languages.find(user.getId())
+                .orElseGet(() -> Language.fromTelegram(user.getLanguageCode()));
+        return new Client(user.getId(), chatId, user.getUserName(), user.getFirstName(), language);
     }
 }

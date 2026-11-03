@@ -1,65 +1,70 @@
 package dev.obsidra.briefbot.dialog;
 
 import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.Map;
+import java.util.ResourceBundle;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import dev.obsidra.briefbot.i18n.Language;
 import dev.obsidra.briefbot.lead.Asset;
+import dev.obsidra.briefbot.lead.Deadline;
 import dev.obsidra.briefbot.lead.ProjectType;
 import dev.obsidra.briefbot.message.Html;
 
 /** Все тексты диалога в одном месте. Разметка — HTML Telegram. */
 public final class Texts {
 
-    public static final String WELCOME = """
-            Привет! Я бот <b>Obsidra</b> 👋
+    static final String BUNDLE = "messages";
 
-            Задам 6 коротких вопросов о вашем проекте — это займёт около минуты. \
-            Ответим в течение рабочего дня.""";
-    public static final String RESUME_OFFER = "У вас есть незаконченная заявка. Продолжим с того места, где остановились?";
-    public static final String RESUMED = "Продолжаем 👇";
-    public static final String RESTARTED = "Начинаем заново 👇";
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{(\\d+)}");
+    private static final Map<Language, ResourceBundle> BUNDLES = new EnumMap<>(Language.class);
 
-    public static final String ASK_TYPE = "<b>1/6.</b> Что нужно сделать?";
-    public static final String ASK_ASSETS = "<b>3/6.</b> Что уже есть? Можно выбрать несколько вариантов.";
-    public static final String ASK_BUDGET = "<b>4/6.</b> Какой бюджет?";
-    public static final String ASK_DEADLINE = "<b>5/6.</b> Когда нужно?";
-    public static final String ASK_CONTACT = "<b>6/6.</b> Как с вами связаться?";
-    public static final String ASK_CONTACT_TEXT =
-            "<b>6/6.</b> Напишите, как с вами связаться: почта, телефон или другой мессенджер.";
-    public static final String ASK_CONTACT_NO_USERNAME = """
-            <b>6/6.</b> Как с вами связаться?
-
-            У вас в Telegram не указан username, поэтому напишите контакт сообщением: \
-            почта, телефон или другой мессенджер.""";
-
-    public static final String DESCRIPTION_TOO_SHORT = "Слишком коротко — опишите задачу хотя бы одним предложением.";
-    public static final String DESCRIPTION_TOO_LONG =
-            "Получилось длинно: уложитесь, пожалуйста, в 1000 символов. Подробности обсудим лично.";
-    public static final String CONTACT_INVALID = "Не похоже на контакт — напишите почту, телефон или ник в мессенджере.";
-    public static final String USE_BUTTONS = "Выберите вариант кнопкой под вопросом 👆";
-    public static final String STALE_BUTTON = "Эта кнопка уже неактуальна";
-    public static final String PICK_ASSET = "Выберите хотя бы один вариант";
-    public static final String UNKNOWN_COMMAND = "Не знаю такой команды. Чтобы оставить заявку, нажмите /start.";
-
-    public static final String CANCELLED = "Заявка отменена. Если передумаете — нажмите /start.";
-    public static final String NOTHING_TO_CANCEL =
-            "У вас нет незаконченных или активных заявок. Чтобы оставить заявку, нажмите /start.";
-    public static final String WITHDRAW_KEPT = "Хорошо, ничего не отзываем.";
-    public static final String WITHDRAW_CHOOSE = "У вас несколько активных заявок. Какую отозвать?";
-    public static final String WITHDRAW_IMPOSSIBLE =
-            "Эту заявку уже нельзя отозвать: по ней принято решение. Если нужно — напишите нам напрямую.";
-    public static final String SENT_MARK = "✅ <b>Отправлено</b>";
-    public static final String LIMIT_REACHED = """
-            Вы уже отправили несколько заявок за сутки. \
-            Чтобы обсудить ещё один проект, напишите нам напрямую — ответим лично.""";
+    static {
+        for (Language language : Language.values()) {
+            BUNDLES.put(language, bundle(language));
+        }
+    }
 
     private Texts() {
     }
 
-    public static String askDescription(ProjectType type) {
-        String example = (type == null ? ProjectType.OTHER : type).example();
-        return "<b>2/6.</b> Опишите задачу в паре предложений.\n\n<i>" + example + "</i>";
+    static ResourceBundle bundle(Language language) {
+        return ResourceBundle.getBundle(BUNDLE, language.locale(),
+                ResourceBundle.Control.getNoFallbackControl(ResourceBundle.Control.FORMAT_PROPERTIES));
+    }
+
+    public static String get(Language language, String key, Object... args) {
+        String text = BUNDLES.get(language).getString(key);
+        if (args.length == 0) {
+            return text;
+        }
+        return PLACEHOLDER.matcher(text)
+                .replaceAll(match -> Matcher.quoteReplacement(String.valueOf(args[Integer.parseInt(match.group(1))])));
+    }
+
+    public static String type(Language language, ProjectType type) {
+        return get(language, "type." + type.name());
+    }
+
+    public static String asset(Language language, Asset asset) {
+        return get(language, "asset." + asset.name());
+    }
+
+    public static String deadline(Language language, Deadline deadline) {
+        return get(language, "deadline." + deadline.name());
+    }
+
+    public static String field(Language language, Step step) {
+        return get(language, "field." + step.name());
+    }
+
+    public static String askDescription(Language language, ProjectType type) {
+        ProjectType hint = type == null ? ProjectType.OTHER : type;
+        return get(language, "ask.description", get(language, "type." + hint.name() + ".example"));
     }
 
     /** Вопрос с выбранным ответом — им заменяется сообщение с кнопками, чтобы в чате осталась история. */
@@ -67,10 +72,10 @@ public final class Texts {
         return question + "\n\n→ <b>" + Html.escape(answer) + "</b>";
     }
 
-    public static String assetsLabel(Set<Asset> assets) {
+    public static String assetsLabel(Language language, Set<Asset> assets) {
         return Arrays.stream(Asset.values())
                 .filter(assets::contains)
-                .map(Asset::label)
+                .map(asset -> asset(language, asset))
                 .collect(Collectors.joining(", "));
     }
 
@@ -79,36 +84,36 @@ public final class Texts {
      *
      * @param privacyUrl ссылка на политику обработки данных; {@code null} — без строки о согласии
      */
-    public static String summary(Draft draft, String privacyUrl) {
-        StringBuilder text = new StringBuilder("<b>Проверьте заявку</b>\n\n");
-        line(text, Step.TYPE, draft.getType() == null ? null : draft.getType().label());
-        line(text, Step.DESCRIPTION, draft.getDescription());
-        line(text, Step.ASSETS, draft.getAssets().isEmpty() ? null : assetsLabel(draft.getAssets()));
-        line(text, Step.BUDGET, draft.getBudget());
-        line(text, Step.DEADLINE, draft.getDeadline() == null ? null : draft.getDeadline().label());
-        line(text, Step.CONTACT, draft.getContact());
+    public static String summary(Draft draft, Language language, String privacyUrl) {
+        StringBuilder text = new StringBuilder(get(language, "summary.title")).append("\n\n");
+        line(text, language, Step.TYPE, draft.getType() == null ? null : type(language, draft.getType()));
+        line(text, language, Step.DESCRIPTION, draft.getDescription());
+        line(text, language, Step.ASSETS,
+                draft.getAssets().isEmpty() ? null : assetsLabel(language, draft.getAssets()));
+        line(text, language, Step.BUDGET, draft.getBudget());
+        line(text, language, Step.DEADLINE,
+                draft.getDeadline() == null ? null : deadline(language, draft.getDeadline()));
+        line(text, language, Step.CONTACT, draft.getContact());
         if (privacyUrl != null) {
-            text.append("\n<i>Нажимая «Отправить», вы соглашаетесь с <a href=\"")
-                    .append(privacyUrl)
-                    .append("\">политикой обработки персональных данных</a>.</i>");
+            text.append('\n').append(get(language, "summary.privacy", privacyUrl));
         }
         return text.toString().stripTrailing();
     }
 
-    public static String submitted(long leadId) {
-        return "✅ Заявка №" + leadId + " принята! Ответим в течение рабочего дня.";
+    public static String submitted(Language language, long leadId) {
+        return get(language, "submitted", leadId);
     }
 
-    public static String withdrawOffer(long leadId, ProjectType type) {
-        return "Отозвать заявку №" + leadId + " («" + type.label() + "»)? Мы больше не будем связываться по ней.";
+    public static String withdrawOffer(Language language, long leadId, ProjectType type) {
+        return get(language, "withdraw.offer", leadId, type(language, type));
     }
 
-    public static String withdrawn(long leadId) {
-        return "↩️ Заявка №" + leadId + " отозвана. Если передумаете — нажмите /start.";
+    public static String withdrawn(Language language, long leadId) {
+        return get(language, "withdrawn", leadId);
     }
 
-    private static void line(StringBuilder text, Step field, String value) {
-        text.append("<b>").append(field.label()).append(":</b> ")
+    private static void line(StringBuilder text, Language language, Step field, String value) {
+        text.append("<b>").append(field(language, field)).append(":</b> ")
                 .append(value == null ? "—" : Html.escape(value))
                 .append('\n');
     }

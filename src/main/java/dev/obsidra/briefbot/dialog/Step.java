@@ -1,31 +1,24 @@
 package dev.obsidra.briefbot.dialog;
 
-/**
- * Шаг диалога, на котором сейчас клиент.
- * {@code label} есть только у шагов-полей заявки: их можно поменять с карточки подтверждения.
- */
+/** Шаг диалога, на котором сейчас клиент. */
 public enum Step {
-    TYPE("Что сделать"),
-    DESCRIPTION("Задача"),
-    ASSETS("Что есть"),
-    BUDGET("Бюджет"),
-    DEADLINE("Сроки"),
-    CONTACT("Контакт"),
+    TYPE(true),
+    DESCRIPTION(true),
+    ASSETS(true),
+    BUDGET(true),
+    DEADLINE(true),
+    CONTACT(true),
     /** Клиент выбрал «Другой способ связи» и вводит контакт текстом. */
-    CONTACT_TEXT(null),
-    CONFIRM(null);
+    CONTACT_TEXT(false),
+    CONFIRM(false);
 
-    private final String label;
+    private final boolean editable;
 
-    Step(String label) {
-        this.label = label;
-    }
-
-    public String label() {
-        return label;
+    Step(boolean editable) {
+        this.editable = editable;
     }
 
     public boolean isEditable() {
-        return label != null;
+        return editable;
     }
 }

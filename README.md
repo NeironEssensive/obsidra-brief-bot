@@ -1,6 +1,6 @@
 # Obsidra Brief Bot
 
-Telegram-бот, который собирает заявки на разработку. Клиент отвечает на 6 коротких вопросов, бот присылает владельцу готовую карточку, а заявка сохраняется в PostgreSQL.
+Telegram-бот, который собирает заявки на разработку. Клиент отвечает на 6 коротких вопросов, бот присылает владельцу готовую карточку, а заявка сохраняется в PostgreSQL. Бот говорит с клиентом по-русски или по-английски.
 
 **Стек:** Java 21 · Spring Boot 4 · TelegramBots 10 (long polling) · PostgreSQL + Flyway · Redis · JUnit 5 · Mockito · Testcontainers · Docker Compose · GitHub Actions
 
@@ -28,6 +28,14 @@ flowchart LR
 - `/cancel` удаляет незаконченную заявку, а уже отправленную предлагает отозвать (если активных несколько — даёт выбрать). Отозвать можно только свою заявку, пока она новая или в работе; владелец получает уведомление.
 - Владельцу приходит карточка с кнопками «Взял в работу» и «Отклонить». Решение по уже разобранной или отозванной заявке кнопки не перезаписывают.
 
+### Языки
+
+- Язык берётся из настроек Telegram клиента (`language_code`): `ru`, `uk`, `be`, `kk` и пустое значение — русский, всё остальное — английский.
+- На приветствии есть кнопка «🇬🇧 English» / «🇷🇺 Русский». Выбор запоминается и важнее настроек Telegram: в Redis без срока жизни, в профиле `local` — в памяти до перезапуска.
+- Все тексты, кнопки и вопросы лежат в `src/main/resources/messages_ru.properties` и `messages_en.properties`. Тест проверяет, что у каждого ключа есть оба перевода с одинаковыми подстановками `{0}` и HTML-разметкой.
+- Варианты бюджета у каждого языка свои (`bot.budgets.ru` и `bot.budgets.en` в `application.yml`): в рублях и в долларах.
+- Карточка заявки и админ-команды всегда на русском. В карточке есть строка «Язык клиента», язык сохраняется в заявке (колонка `leads.language`).
+
 ### Команды
 
 | Команда | Кто | Что делает |
@@ -45,7 +53,8 @@ flowchart LR
 src/main/java/dev/obsidra/briefbot/
 ├── config/     BotProperties — настройки из application.yml
 ├── message/    Reply, Button, BotResponse — ответы бота без привязки к Telegram API
-├── dialog/     DialogService (сценарий по шагам Step), Draft, черновики в Redis (или в памяти — профиль local)
+├── dialog/     DialogService (сценарий по шагам Step), Draft, черновики в Redis (или в памяти — профиль local), Texts
+├── i18n/       Language (выбор по language_code), выбранный клиентом язык в Redis (или в памяти — профиль local)
 ├── lead/       Lead (JPA), LeadService (лимит, статусы, статистика), LeadRepository
 ├── notify/     карточка заявки и уведомление владельцу после коммита транзакции
 ├── admin/      /leads, /stats, кнопки статуса
@@ -73,7 +82,7 @@ docker compose up -d
 
 Теперь заявки приходят вам, а команды `/leads` и `/stats` отвечают только на ваш ID.
 
-Варианты бюджета, лимит заявок, время жизни черновика и ссылки задаются в `src/main/resources/application.yml`, в секции `bot`.
+Варианты бюджета для каждого языка, лимит заявок, время жизни черновика и ссылки задаются в `src/main/resources/application.yml`, в секции `bot`. Тексты бота — в `src/main/resources/messages_*.properties`.
 
 ### Без Docker (на своём компьютере)
 
@@ -97,9 +106,13 @@ java -jar target/brief-bot.jar --spring.profiles.active=local
 ./mvnw verify
 ```
 
-- `DialogServiceTest` — весь сценарий брифа: полный путь, валидация, множественный выбор, устаревшие кнопки, редактирование, лимит, экранирование HTML, отзыв заявки.
-- `BriefBotIntegrationTest` — контекст приложения против настоящих PostgreSQL и Redis в Docker (Testcontainers): миграции Flyway, массивы PostgreSQL, TTL черновиков, лимит, статистика, правила отзыва.
+- `DialogServiceTest` — весь сценарий брифа: полный путь на русском и на английском, переключение языка, валидация, множественный выбор, устаревшие кнопки, редактирование, лимит, экранирование HTML, отзыв заявки.
+- `TextsTest`, `LanguageTest` — у всех ключей есть оба перевода, выбор языка по `language_code`.
+- `BriefBotUpdateConsumerTest` — язык клиента из апдейта Telegram и приоритет выбранного вручную.
+- `LeadCardsTest` — карточка владельцу на русском с пометкой языка клиента.
+- `BriefBotIntegrationTest` — контекст приложения против настоящих PostgreSQL и Redis в Docker (Testcontainers): миграции Flyway, массивы PostgreSQL, TTL черновиков, язык заявки и выбранный язык в Redis, лимит, статистика, правила отзыва.
 - `TelegramConfigTest`, `CommandParsingTest` — настройка прокси и разбор команд.
+- `BotPropertiesTest` — в `application.yml` есть варианты бюджета для каждого языка.
 
 Для интеграционных тестов нужен запущенный Docker.
 

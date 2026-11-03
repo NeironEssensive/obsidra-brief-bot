@@ -2,6 +2,8 @@ package dev.obsidra.briefbot.lead;
 
 import java.util.Set;
 
+import dev.obsidra.briefbot.i18n.Language;
+
 /** Готовая к сохранению заявка — то, что клиент заполнил в диалоге. */
 public record LeadRequest(
         long tgUserId,
@@ -12,7 +14,8 @@ public record LeadRequest(
         Set<Asset> assets,
         String budget,
         Deadline deadline,
-        String contact) {
+        String contact,
+        Language language) {
 
     public LeadRequest {
         assets = Set.copyOf(assets);
