@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import dev.obsidra.briefbot.config.BotProperties;
 import dev.obsidra.briefbot.dialog.Texts;
+import dev.obsidra.briefbot.i18n.Language;
 import dev.obsidra.briefbot.lead.Lead;
 import dev.obsidra.briefbot.lead.LeadStatus;
 import dev.obsidra.briefbot.message.Button;
@@ -57,16 +58,18 @@ public class LeadCards {
                 <b>Сроки:</b> %s
                 <b>Контакт:</b> %s
                 <b>Клиент:</b> %s
+                <b>Язык клиента:</b> %s
 
                 <i>%s</i>""".formatted(
                 header,
-                lead.getProjectType().label(),
+                Texts.type(Language.RU, lead.getProjectType()),
                 Html.escape(lead.getDescription()),
-                Texts.assetsLabel(lead.getAssets()),
+                Texts.assetsLabel(Language.RU, lead.getAssets()),
                 Html.escape(lead.getBudget()),
-                lead.getDeadline().label(),
+                Texts.deadline(Language.RU, lead.getDeadline()),
                 Html.escape(lead.getContact()),
                 client,
+                lead.getLanguage().label(),
                 FULL_TIME.format(lead.getCreatedAt().atZone(props.zone())));
     }
 
@@ -82,7 +85,7 @@ public class LeadCards {
     public String shortLine(Lead lead) {
         return "№%d · %s · %s · %s · %s".formatted(
                 lead.getId(),
-                lead.getProjectType().label(),
+                Texts.type(Language.RU, lead.getProjectType()),
                 Html.escape(lead.getBudget()),
                 lead.getStatus().label(),
                 SHORT_TIME.format(lead.getCreatedAt().atZone(props.zone())));

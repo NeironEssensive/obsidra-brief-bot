@@ -17,6 +17,8 @@ import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import dev.obsidra.briefbot.i18n.Language;
+
 @Entity
 @Table(name = "leads")
 public class Lead {
@@ -59,6 +61,10 @@ public class Lead {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
+    private Language language;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private LeadStatus status;
 
     @Column(name = "created_at", nullable = false)
@@ -84,6 +90,7 @@ public class Lead {
         lead.budget = request.budget();
         lead.deadline = request.deadline();
         lead.contact = request.contact();
+        lead.language = request.language();
         lead.status = LeadStatus.NEW;
         lead.createdAt = now;
         lead.updatedAt = now;
@@ -135,6 +142,10 @@ public class Lead {
 
     public String getContact() {
         return contact;
+    }
+
+    public Language getLanguage() {
+        return language;
     }
 
     public LeadStatus getStatus() {

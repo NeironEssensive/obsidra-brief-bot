@@ -21,6 +21,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import dev.obsidra.briefbot.dialog.Draft;
 import dev.obsidra.briefbot.dialog.DraftStore;
 import dev.obsidra.briefbot.dialog.Step;
+import dev.obsidra.briefbot.i18n.Language;
+import dev.obsidra.briefbot.i18n.LanguageStore;
 import dev.obsidra.briefbot.lead.Asset;
 import dev.obsidra.briefbot.lead.Deadline;
 import dev.obsidra.briefbot.lead.Lead;
@@ -56,6 +58,9 @@ class BriefBotIntegrationTest {
 
     @Autowired
     private StringRedisTemplate redisTemplate;
+
+    @Autowired
+    private LanguageStore languages;
 
     @BeforeEach
     void cleanDatabase() {
@@ -96,6 +101,25 @@ class BriefBotIntegrationTest {
         assertThat(saved.getProjectType()).isEqualTo(ProjectType.BOT);
         assertThat(saved.getAssets()).containsExactlyInAnyOrder(Asset.SPEC, Asset.REFERENCES);
         assertThat(saved.getStatus()).isEqualTo(LeadStatus.NEW);
+    }
+
+    @Test
+    void leadKeepsClientLanguage() {
+        Lead russian = leads.submit(request(210L, ProjectType.SITE));
+        Lead english = leads.submit(request(211L, ProjectType.SITE, Language.EN));
+
+        assertThat(repository.findById(russian.getId()).orElseThrow().getLanguage()).isEqualTo(Language.RU);
+        assertThat(repository.findById(english.getId()).orElseThrow().getLanguage()).isEqualTo(Language.EN);
+    }
+
+    @Test
+    void chosenLanguageIsStoredInRedis() {
+        assertThat(languages.find(700L)).isEmpty();
+
+        languages.save(700L, Language.EN);
+
+        assertThat(languages.find(700L)).contains(Language.EN);
+        assertThat(redisTemplate.opsForValue().get("brief:lang:700")).isEqualTo("EN");
     }
 
     @Test
@@ -148,7 +172,11 @@ class BriefBotIntegrationTest {
     }
 
     private static LeadRequest request(long userId, ProjectType type) {
+        return request(userId, type, Language.RU);
+    }
+
+    private static LeadRequest request(long userId, ProjectType type, Language language) {
         return new LeadRequest(userId, "client" + userId, "Клиент", type, "Нужен проект для теста",
-                Set.of(Asset.SPEC, Asset.REFERENCES), "20–50 тыс. ₽", Deadline.MONTH, "@client" + userId);
+                Set.of(Asset.SPEC, Asset.REFERENCES), "20–50 тыс. ₽", Deadline.MONTH, "@client" + userId, language);
     }
 }

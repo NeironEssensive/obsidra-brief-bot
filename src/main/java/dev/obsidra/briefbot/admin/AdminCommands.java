@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import dev.obsidra.briefbot.config.BotProperties;
 import dev.obsidra.briefbot.dialog.Texts;
+import dev.obsidra.briefbot.i18n.Language;
 import dev.obsidra.briefbot.lead.Lead;
 import dev.obsidra.briefbot.lead.LeadService;
 import dev.obsidra.briefbot.lead.LeadStats;
@@ -52,7 +53,7 @@ public class AdminCommands {
             return BotResponse.of(Reply.send("За 7 дней заявок не было."));
         }
         String byType = stats.byType().entrySet().stream()
-                .map(e -> "• " + e.getKey().label() + " — " + e.getValue())
+                .map(e -> "• " + Texts.type(Language.RU, e.getKey()) + " — " + e.getValue())
                 .collect(Collectors.joining("\n"));
         String byStatus = stats.byStatus().entrySet().stream()
                 .map(e -> "• " + e.getKey().label() + " — " + e.getValue())
@@ -71,7 +72,7 @@ public class AdminCommands {
     public BotResponse onStatusButton(String data) {
         String[] parts = data.split(":");
         if (parts.length != 3) {
-            return BotResponse.notice(Texts.STALE_BUTTON);
+            return BotResponse.notice(Texts.get(Language.RU, "stale_button"));
         }
         long leadId;
         LeadStatus status;
@@ -79,7 +80,7 @@ public class AdminCommands {
             leadId = Long.parseLong(parts[1]);
             status = LeadStatus.valueOf(parts[2]);
         } catch (IllegalArgumentException e) {
-            return BotResponse.notice(Texts.STALE_BUTTON);
+            return BotResponse.notice(Texts.get(Language.RU, "stale_button"));
         }
         return leads.changeStatus(leadId, status)
                 .map(lead -> new BotResponse(List.of(Reply.replace(cards.cardWithStatus(lead))),

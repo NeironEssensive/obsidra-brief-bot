@@ -6,6 +6,7 @@ final class Callbacks {
     static final String START = "start";
     static final String RESUME = "resume";
     static final String RESTART = "restart";
+    static final String LANGUAGE = "lang:";
 
     static final String TYPE = "type:";
     static final String ASSET = "asset:";
